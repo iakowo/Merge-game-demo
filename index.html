@@ -80,18 +80,15 @@
       document.getElementById('energy').textContent = `体力：${energy}`;
     }
 
-    // 解析等级 "1.1" → [1, 1]
     function parseLevel(label) {
       return label.split('.').map(Number);
     }
 
-    // 生成下一等级文字 "1.1" → "1.2"
     function nextLevel(label) {
       const [main, sub] = parseLevel(label);
       return `${main}.${sub + 1}`;
     }
 
-    // 生成 tile DOM 元素
     function createTile(type, label, onClick, extraClass = '') {
       const tile = document.createElement('div');
       tile.className = `tile ${extraClass}`;
@@ -103,7 +100,6 @@
 
       if (onClick) tile.addEventListener('click', onClick);
 
-      // 触控拖拽支持 + 合成逻辑
       tile.addEventListener('touchstart', (e) => {
         const originalParent = tile.parentElement;
         tile.style.position = 'absolute';
@@ -129,19 +125,14 @@
           tile.style.left = '';
           tile.style.top = '';
 
-          // 获取中心点坐标
-          const rect = tile.getBoundingClientRect();
-          const centerX = rect.left + rect.width / 2;
-          const centerY = rect.top + rect.height / 2;
+          const touch = e.changedTouches[0];
+          const x = touch.clientX;
+          const y = touch.clientY;
 
-          // 用中心点匹配 slot
           let dropTarget = null;
           for (const slot of board.children) {
-            const slotRect = slot.getBoundingClientRect();
-            if (
-              centerX >= slotRect.left && centerX <= slotRect.right &&
-              centerY >= slotRect.top && centerY <= slotRect.bottom
-            ) {
+            const rect = slot.getBoundingClientRect();
+            if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
               dropTarget = slot;
               break;
             }
@@ -169,7 +160,6 @@
       return tile;
     }
 
-    // 创建格子
     function createSlot() {
       const slot = document.createElement('div');
       slot.className = 'slot';
@@ -177,7 +167,6 @@
       return slot;
     }
 
-    // 获取最近空格子
     function getClosestEmptySlot(fromIndex) {
       let radius = 1;
       while (radius < 100) {
@@ -202,7 +191,6 @@
       if (targetSlot) targetSlot.appendChild(tile);
     }
 
-    // 初始化棋盘与初始元素
     function initializeBoard() {
       for (let i = 0; i < 70; i++) board.appendChild(createSlot());
 
