@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>合成小游戏demo</title> <!-- 页面标题 -->
+  <title>合成小游戏demo</title>
   <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@700&display=swap" rel="stylesheet">
   <style>
-    /* 页面整体样式 */
     body {
       margin: 0;
       font-family: 'Comic Neue', cursive;
@@ -18,6 +17,7 @@
       justify-content: flex-start;
       min-height: 100vh;
       padding-top: 20px;
+      touch-action: none;
     }
 
     h1 { margin-bottom: 10px; }
@@ -27,7 +27,6 @@
       font-size: 18px;
     }
 
-    /* 游戏棋盘区域 */
     #game-board {
       display: grid;
       grid-template-columns: repeat(7, minmax(40px, 1fr));
@@ -40,7 +39,6 @@
       box-sizing: border-box;
     }
 
-    /* 每个格子 */
     .slot {
       width: 48px;
       height: 48px;
@@ -49,9 +47,10 @@
       align-items: center;
       justify-content: center;
       border-radius: 6px;
+      touch-action: none;
+      position: relative;
     }
 
-    /* 可拖拽元素 tile 的样式 */
     .tile {
       width: auto;
       height: auto;
@@ -63,9 +62,12 @@
       background-color: transparent;
       cursor: grab;
       border-radius: 6px;
+      touch-action: none;
+      pointer-events: auto;
+      position: fixed;
+      z-index: 9999;
     }
 
-    /* 不同类型 tile 的颜色 */
     .tile-1, .tile-1-sub { color: #00ff88; }
     .tile-2, .tile-2-sub { color: #3399ff; }
     .tile-3, .tile-3-sub { color: #cc99ff; }
@@ -76,9 +78,8 @@
   <div id="energy">体力：100</div>
   <div id="game-board"></div>
   <script>
-    // 获取游戏棋盘 DOM 元素
+    // 初始化变量
     const board = document.getElementById('game-board');
-    let currentDrag = null;
     let energy = 100;
     let idCounter = 0;
 
@@ -87,66 +88,112 @@
       document.getElementById('energy').textContent = `体力：${energy}`;
     }
 
-    // 创建元素 tile
+    // 分析等级格式，例如 "1.1" => [1,1]
+    function parseLevel(label) {
+      return label.split('.').map(Number);
+    }
+
+    // 获取下一等级标签
+    function nextLevel(label) {
+      const [main, sub] = parseLevel(label);
+      return `${main}.${sub + 1}`;
+    }
+
+    // 创建 tile 元素
     function createTile(type, label, onClick, extraClass = '') {
       const tile = document.createElement('div');
       tile.className = `tile ${extraClass}`;
       tile.textContent = label;
       tile.dataset.role = type;
+      tile.dataset.level = label;
       tile.dataset.id = ++idCounter;
-      tile.setAttribute('draggable', true);
-
-      tile.addEventListener('dragstart', () => {
-        currentDrag = tile;
-      });
-
-      tile.addEventListener('dragend', () => {
-        currentDrag = null;
-      });
+      tile.setAttribute('draggable', false);
+      tile.dataset.button = (type.length === 1);
 
       if (onClick) {
-        tile.addEventListener('click', onClick);
+        tile.addEventListener('click', e => {
+          e.stopPropagation();
+          onClick();
+        });
       }
+
+      let offsetX = 0;
+      let offsetY = 0;
+
+      tile.addEventListener('pointerdown', e => {
+        const rect = tile.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+        tile.setPointerCapture(e.pointerId);
+        tile.style.position = 'fixed';
+        tile.style.zIndex = 9999;
+
+        const moveHandler = e => {
+          tile.style.left = `${e.clientX - offsetX}px`;
+          tile.style.top = `${e.clientY - offsetY}px`;
+        };
+
+        const upHandler = e => {
+          tile.releasePointerCapture(e.pointerId);
+          document.removeEventListener('pointermove', moveHandler);
+          document.removeEventListener('pointerup', upHandler);
+
+          const rects = Array.from(board.children).map(slot => slot.getBoundingClientRect());
+          let minDist = Infinity;
+          let targetSlot = null;
+
+          rects.forEach((rect, index) => {
+            const dx = e.clientX - (rect.left + rect.width / 2);
+            const dy = e.clientY - (rect.top + rect.height / 2);
+            const dist = dx * dx + dy * dy;
+            if (dist < minDist) {
+              minDist = dist;
+              targetSlot = board.children[index];
+            }
+          });
+
+          if (targetSlot) {
+            const existing = targetSlot.children[0];
+            if (!existing) {
+              targetSlot.appendChild(tile);
+            } else if (existing !== tile && existing.textContent === tile.textContent) {
+              const next = createTile(tile.dataset.role, nextLevel(tile.dataset.level), null, tile.className);
+              targetSlot.removeChild(existing);
+              tile.remove();
+              targetSlot.appendChild(next);
+            }
+          }
+
+          tile.style.position = 'absolute';
+          tile.style.left = '';
+          tile.style.top = '';
+          tile.style.zIndex = 10;
+        };
+
+        document.addEventListener('pointermove', moveHandler);
+        document.addEventListener('pointerup', upHandler);
+      });
 
       return tile;
     }
 
-    // 创建格子 slot
+    // 创建空格子
     function createSlot() {
       const slot = document.createElement('div');
       slot.className = 'slot';
       slot.dataset.role = 'empty';
 
-      slot.addEventListener('dragover', (e) => e.preventDefault());
-
-      slot.addEventListener('drop', (e) => {
-        e.preventDefault();
-        if (!currentDrag || currentDrag === slot.firstChild) return;
-
-        const targetTile = slot.firstChild;
-
-        if (!targetTile) {
-          slot.appendChild(currentDrag);
-        } else {
-          const srcLevel = parseFloat(currentDrag.textContent);
-          const tgtLevel = parseFloat(targetTile.textContent);
-
-          if (!isNaN(srcLevel) && srcLevel === tgtLevel) {
-            const newTile = createTile(currentDrag.dataset.role, (srcLevel + 0.1).toFixed(1), null, currentDrag.className.replace('tile ', ''));
-            slot.replaceChild(newTile, targetTile);
-            currentDrag.remove();
-          } else {
-            const currentParent = currentDrag.parentElement;
-            slot.replaceChild(currentDrag, targetTile);
-            currentParent.appendChild(targetTile);
-          }
+      slot.addEventListener('click', () => {
+        const tile = slot.children[0];
+        if (tile && tile.dataset.button === 'true') {
+          tile.click();
         }
       });
 
       return slot;
     }
 
-    // 寻找距离当前位置最近的空格子
+    // 查找最近空格
     function getClosestEmptySlot(fromIndex) {
       let radius = 1;
       while (radius < 100) {
@@ -157,9 +204,7 @@
             if (x >= 0 && x < 7 && y >= 0 && y < 10) {
               const idx = y * 7 + x;
               const slot = board.children[idx];
-              if (slot && slot.children.length === 0) {
-                return slot;
-              }
+              if (slot && slot.children.length === 0) return slot;
             }
           }
         }
@@ -168,51 +213,43 @@
       return null;
     }
 
-    // 把 tile 放到临近的空格子
+    // 放置元素
     function placeNear(fromIndex, tile) {
       const targetSlot = getClosestEmptySlot(fromIndex);
-      if (targetSlot) {
-        targetSlot.appendChild(tile);
-      }
+      if (targetSlot) targetSlot.appendChild(tile);
     }
 
-    // 初始化游戏棋盘与初始元素
+    // 初始化
     function initializeBoard() {
-      for (let i = 0; i < 70; i++) {
-        board.appendChild(createSlot());
-      }
+      for (let i = 0; i < 70; i++) board.appendChild(createSlot());
 
-      // 初始点击元素 1
       const tile1 = createTile('1', '1', () => {
         if (energy <= 0) return alert('体力不足');
-        const subTile = createTile('1-sub', '1.1', null, 'tile-1-sub');
+        const sub = createTile('1-sub', '1.1', null, 'tile-1-sub');
         const index = Array.from(board.children).findIndex(slot => slot.contains(tile1));
-        placeNear(index, subTile);
+        placeNear(index, sub);
         energy--;
         updateEnergyDisplay();
       }, 'tile-1');
 
-      // 初始点击元素 2
       const tile2 = createTile('2', '2', () => {
         if (energy <= 0) return alert('体力不足');
-        const subTile = createTile('2-sub', '2.1', null, 'tile-2-sub');
+        const sub = createTile('2-sub', '2.1', null, 'tile-2-sub');
         const index = Array.from(board.children).findIndex(slot => slot.contains(tile2));
-        placeNear(index, subTile);
+        placeNear(index, sub);
         energy--;
         updateEnergyDisplay();
       }, 'tile-2');
 
-      // 初始点击元素 3
       const tile3 = createTile('3', '3', () => {
         if (energy <= 0) return alert('体力不足');
-        const subTile = createTile('3-sub', '3.1', null, 'tile-3-sub');
+        const sub = createTile('3-sub', '3.1', null, 'tile-3-sub');
         const index = Array.from(board.children).findIndex(slot => slot.contains(tile3));
-        placeNear(index, subTile);
+        placeNear(index, sub);
         energy--;
         updateEnergyDisplay();
       }, 'tile-3');
 
-      // 把初始元素放到左上角区域
       board.children[0].appendChild(tile1);
       board.children[1].appendChild(tile2);
       board.children[2].appendChild(tile3);
