@@ -73,7 +73,6 @@
   <div id="game-board"></div>
   <script>
     const board = document.getElementById('game-board');
-    let currentDrag = null;
     let energy = 100;
     let idCounter = 0;
 
@@ -81,24 +80,41 @@
       document.getElementById('energy').textContent = `体力：${energy}`;
     }
 
+    // 解析等级 "1.1" → [1, 1]
+    function parseLevel(label) {
+      return label.split('.').map(Number);
+    }
+
+    // 生成下一等级文字 "1.1" → "1.2"
+    function nextLevel(label) {
+      const [main, sub] = parseLevel(label);
+      return `${main}.${sub + 1}`;
+    }
+
+    // 生成 tile DOM 元素
     function createTile(type, label, onClick, extraClass = '') {
       const tile = document.createElement('div');
       tile.className = `tile ${extraClass}`;
       tile.textContent = label;
       tile.dataset.role = type;
+      tile.dataset.level = label;
       tile.dataset.id = ++idCounter;
       tile.setAttribute('draggable', false);
 
-      // 触控拖拽支持
+      // 点击生成子 tile
+      if (onClick) tile.addEventListener('click', onClick);
+
+      // 触控拖拽支持 + 合成逻辑
       tile.addEventListener('touchstart', (e) => {
+        const originalParent = tile.parentElement;
         tile.style.position = 'absolute';
         tile.style.zIndex = 1000;
         document.body.appendChild(tile);
         moveAt(e.touches[0].pageX, e.touches[0].pageY);
 
-        function moveAt(pageX, pageY) {
-          tile.style.left = pageX - tile.offsetWidth / 2 + 'px';
-          tile.style.top = pageY - tile.offsetHeight / 2 + 'px';
+        function moveAt(x, y) {
+          tile.style.left = x - tile.offsetWidth / 2 + 'px';
+          tile.style.top = y - tile.offsetHeight / 2 + 'px';
         }
 
         function onTouchMove(e) {
@@ -116,21 +132,31 @@
 
           const touch = e.changedTouches[0];
           const dropTarget = document.elementFromPoint(touch.clientX, touch.clientY);
+
           if (dropTarget && dropTarget.classList.contains('slot')) {
-            if (dropTarget.children.length === 0) {
+            const existing = dropTarget.querySelector('.tile');
+            if (!existing) {
               dropTarget.appendChild(tile);
+            } else if (existing !== tile && existing.dataset.level === tile.dataset.level) {
+              // 合成逻辑
+              const newLevel = nextLevel(tile.dataset.level);
+              const newTile = createTile(tile.dataset.role, newLevel, null, tile.classList[1]);
+              dropTarget.innerHTML = '';
+              dropTarget.appendChild(newTile);
+              originalParent.innerHTML = '';
+            } else {
+              originalParent.appendChild(tile); // 合成失败，回退
             }
+          } else {
+            originalParent.appendChild(tile);
           }
         };
       });
 
-      if (onClick) {
-        tile.addEventListener('click', onClick);
-      }
-
       return tile;
     }
 
+    // 创建格子
     function createSlot() {
       const slot = document.createElement('div');
       slot.className = 'slot';
@@ -138,6 +164,7 @@
       return slot;
     }
 
+    // 获取最近空格子
     function getClosestEmptySlot(fromIndex) {
       let radius = 1;
       while (radius < 100) {
@@ -148,9 +175,7 @@
             if (x >= 0 && x < 7 && y >= 0 && y < 10) {
               const idx = y * 7 + x;
               const slot = board.children[idx];
-              if (slot && slot.children.length === 0) {
-                return slot;
-              }
+              if (slot && slot.children.length === 0) return slot;
             }
           }
         }
@@ -159,41 +184,39 @@
       return null;
     }
 
+    // 就近放置
     function placeNear(fromIndex, tile) {
       const targetSlot = getClosestEmptySlot(fromIndex);
-      if (targetSlot) {
-        targetSlot.appendChild(tile);
-      }
+      if (targetSlot) targetSlot.appendChild(tile);
     }
 
+    // 初始化棋盘与初始元素
     function initializeBoard() {
-      for (let i = 0; i < 70; i++) {
-        board.appendChild(createSlot());
-      }
+      for (let i = 0; i < 70; i++) board.appendChild(createSlot());
 
       const tile1 = createTile('1', '1', () => {
         if (energy <= 0) return alert('体力不足');
-        const subTile = createTile('1-sub', '1.1', null, 'tile-1-sub');
+        const sub = createTile('1-sub', '1.1', null, 'tile-1-sub');
         const index = Array.from(board.children).findIndex(slot => slot.contains(tile1));
-        placeNear(index, subTile);
+        placeNear(index, sub);
         energy--;
         updateEnergyDisplay();
       }, 'tile-1');
 
       const tile2 = createTile('2', '2', () => {
         if (energy <= 0) return alert('体力不足');
-        const subTile = createTile('2-sub', '2.1', null, 'tile-2-sub');
+        const sub = createTile('2-sub', '2.1', null, 'tile-2-sub');
         const index = Array.from(board.children).findIndex(slot => slot.contains(tile2));
-        placeNear(index, subTile);
+        placeNear(index, sub);
         energy--;
         updateEnergyDisplay();
       }, 'tile-2');
 
       const tile3 = createTile('3', '3', () => {
         if (energy <= 0) return alert('体力不足');
-        const subTile = createTile('3-sub', '3.1', null, 'tile-3-sub');
+        const sub = createTile('3-sub', '3.1', null, 'tile-3-sub');
         const index = Array.from(board.children).findIndex(slot => slot.contains(tile3));
-        placeNear(index, subTile);
+        placeNear(index, sub);
         energy--;
         updateEnergyDisplay();
       }, 'tile-3');
