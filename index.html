@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>合成小游戏demo</title> <!-- 页面标题 -->
+  <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@700&display=swap" rel="stylesheet">
+  <style>
+    /* 页面整体样式 */
+    body {
+      margin: 0;
+      font-family: 'Comic Neue', cursive;
+      background-color: #1a1a1a;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      padding-top: 20px;
+    }
+
+    h1 { margin-bottom: 10px; }
+
+    #energy {
+      margin-bottom: 10px;
+      font-size: 18px;
+    }
+
+    /* 游戏棋盘区域 */
+    #game-board {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(40px, 1fr));
+      grid-auto-rows: minmax(40px, 1fr);
+      grid-gap: 5px;
+      background-color: #333;
+      padding: 10px;
+      border-radius: 10px;
+      max-width: 100vw;
+      box-sizing: border-box;
+    }
+
+    /* 每个格子 */
+    .slot {
+      width: 48px;
+      height: 48px;
+      background-color: #444;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+    }
+
+    /* 可拖拽元素 tile 的样式 */
+    .tile {
+      width: auto;
+      height: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: bold;
+      background-color: transparent;
+      cursor: grab;
+      border-radius: 6px;
+    }
+
+    /* 不同类型 tile 的颜色 */
+    .tile-1, .tile-1-sub { color: #00ff88; }
+    .tile-2, .tile-2-sub { color: #3399ff; }
+    .tile-3, .tile-3-sub { color: #cc99ff; }
+  </style>
+</head>
+<body>
+  <h1>合成小游戏demo</h1>
+  <div id="energy">体力：100</div>
+  <div id="game-board"></div>
+  <script>
+    // 获取游戏棋盘 DOM 元素
+    const board = document.getElementById('game-board');
+    let currentDrag = null;
+    let energy = 100;
+    let idCounter = 0;
+
+    // 更新体力显示
+    function updateEnergyDisplay() {
+      document.getElementById('energy').textContent = `体力：${energy}`;
+    }
+
+    // 创建元素 tile
+    function createTile(type, label, onClick, extraClass = '') {
+      const tile = document.createElement('div');
+      tile.className = `tile ${extraClass}`;
+      tile.textContent = label;
+      tile.dataset.role = type;
+      tile.dataset.id = ++idCounter;
+      tile.setAttribute('draggable', true);
+
+      tile.addEventListener('dragstart', () => {
+        currentDrag = tile;
+      });
+
+      tile.addEventListener('dragend', () => {
+        currentDrag = null;
+      });
+
+      if (onClick) {
+        tile.addEventListener('click', onClick);
+      }
+
+      return tile;
+    }
+
+    // 创建格子 slot
+    function createSlot() {
+      const slot = document.createElement('div');
+      slot.className = 'slot';
+      slot.dataset.role = 'empty';
+
+      slot.addEventListener('dragover', (e) => e.preventDefault());
+
+      slot.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (!currentDrag || currentDrag === slot.firstChild) return;
+
+        const targetTile = slot.firstChild;
+
+        if (!targetTile) {
+          slot.appendChild(currentDrag);
+        } else {
+          const srcLevel = parseFloat(currentDrag.textContent);
+          const tgtLevel = parseFloat(targetTile.textContent);
+
+          if (!isNaN(srcLevel) && srcLevel === tgtLevel) {
+            const newTile = createTile(currentDrag.dataset.role, (srcLevel + 0.1).toFixed(1), null, currentDrag.className.replace('tile ', ''));
+            slot.replaceChild(newTile, targetTile);
+            currentDrag.remove();
+          } else {
+            const currentParent = currentDrag.parentElement;
+            slot.replaceChild(currentDrag, targetTile);
+            currentParent.appendChild(targetTile);
+          }
+        }
+      });
+
+      return slot;
+    }
+
+    // 寻找距离当前位置最近的空格子
+    function getClosestEmptySlot(fromIndex) {
+      let radius = 1;
+      while (radius < 100) {
+        for (let i = -radius; i <= radius; i++) {
+          for (let j = -radius; j <= radius; j++) {
+            const x = fromIndex % 7 + i;
+            const y = Math.floor(fromIndex / 7) + j;
+            if (x >= 0 && x < 7 && y >= 0 && y < 10) {
+              const idx = y * 7 + x;
+              const slot = board.children[idx];
+              if (slot && slot.children.length === 0) {
+                return slot;
+              }
+            }
+          }
+        }
+        radius++;
+      }
+      return null;
+    }
+
+    // 把 tile 放到临近的空格子
+    function placeNear(fromIndex, tile) {
+      const targetSlot = getClosestEmptySlot(fromIndex);
+      if (targetSlot) {
+        targetSlot.appendChild(tile);
+      }
+    }
+
+    // 初始化游戏棋盘与初始元素
+    function initializeBoard() {
+      for (let i = 0; i < 70; i++) {
+        board.appendChild(createSlot());
+      }
+
+      // 初始点击元素 1
+      const tile1 = createTile('1', '1', () => {
+        if (energy <= 0) return alert('体力不足');
+        const subTile = createTile('1-sub', '1.1', null, 'tile-1-sub');
+        const index = Array.from(board.children).findIndex(slot => slot.contains(tile1));
+        placeNear(index, subTile);
+        energy--;
+        updateEnergyDisplay();
+      }, 'tile-1');
+
+      // 初始点击元素 2
+      const tile2 = createTile('2', '2', () => {
+        if (energy <= 0) return alert('体力不足');
+        const subTile = createTile('2-sub', '2.1', null, 'tile-2-sub');
+        const index = Array.from(board.children).findIndex(slot => slot.contains(tile2));
+        placeNear(index, subTile);
+        energy--;
+        updateEnergyDisplay();
+      }, 'tile-2');
+
+      // 初始点击元素 3
+      const tile3 = createTile('3', '3', () => {
+        if (energy <= 0) return alert('体力不足');
+        const subTile = createTile('3-sub', '3.1', null, 'tile-3-sub');
+        const index = Array.from(board.children).findIndex(slot => slot.contains(tile3));
+        placeNear(index, subTile);
+        energy--;
+        updateEnergyDisplay();
+      }, 'tile-3');
+
+      // 把初始元素放到左上角区域
+      board.children[0].appendChild(tile1);
+      board.children[1].appendChild(tile2);
+      board.children[2].appendChild(tile3);
+    }
+
+    initializeBoard();
+    updateEnergyDisplay();
+  </script>
+</body>
+</html>
