@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>合成小游戏demo</title> <!-- 页面标题 -->
+  <title>合成小游戏demo</title>
   <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@700&display=swap" rel="stylesheet">
   <style>
-    /* 页面整体样式 */
     body {
       margin: 0;
       font-family: 'Comic Neue', cursive;
@@ -27,7 +26,6 @@
       font-size: 18px;
     }
 
-    /* 游戏棋盘区域 */
     #game-board {
       display: grid;
       grid-template-columns: repeat(7, minmax(40px, 1fr));
@@ -40,7 +38,6 @@
       box-sizing: border-box;
     }
 
-    /* 每个格子 */
     .slot {
       width: 48px;
       height: 48px;
@@ -51,7 +48,6 @@
       border-radius: 6px;
     }
 
-    /* 可拖拽元素 tile 的样式 */
     .tile {
       width: auto;
       height: auto;
@@ -63,9 +59,9 @@
       background-color: transparent;
       cursor: grab;
       border-radius: 6px;
+      touch-action: none;
     }
 
-    /* 不同类型 tile 的颜色 */
     .tile-1, .tile-1-sub { color: #00ff88; }
     .tile-2, .tile-2-sub { color: #3399ff; }
     .tile-3, .tile-3-sub { color: #cc99ff; }
@@ -76,32 +72,56 @@
   <div id="energy">体力：100</div>
   <div id="game-board"></div>
   <script>
-    // 获取游戏棋盘 DOM 元素
     const board = document.getElementById('game-board');
     let currentDrag = null;
     let energy = 100;
     let idCounter = 0;
 
-    // 更新体力显示
     function updateEnergyDisplay() {
       document.getElementById('energy').textContent = `体力：${energy}`;
     }
 
-    // 创建元素 tile
     function createTile(type, label, onClick, extraClass = '') {
       const tile = document.createElement('div');
       tile.className = `tile ${extraClass}`;
       tile.textContent = label;
       tile.dataset.role = type;
       tile.dataset.id = ++idCounter;
-      tile.setAttribute('draggable', true);
+      tile.setAttribute('draggable', false);
 
-      tile.addEventListener('dragstart', () => {
-        currentDrag = tile;
-      });
+      // 触控拖拽支持
+      tile.addEventListener('touchstart', (e) => {
+        tile.style.position = 'absolute';
+        tile.style.zIndex = 1000;
+        document.body.appendChild(tile);
+        moveAt(e.touches[0].pageX, e.touches[0].pageY);
 
-      tile.addEventListener('dragend', () => {
-        currentDrag = null;
+        function moveAt(pageX, pageY) {
+          tile.style.left = pageX - tile.offsetWidth / 2 + 'px';
+          tile.style.top = pageY - tile.offsetHeight / 2 + 'px';
+        }
+
+        function onTouchMove(e) {
+          moveAt(e.touches[0].pageX, e.touches[0].pageY);
+        }
+
+        document.addEventListener('touchmove', onTouchMove);
+
+        tile.ontouchend = function(e) {
+          document.removeEventListener('touchmove', onTouchMove);
+          tile.style.position = '';
+          tile.style.zIndex = '';
+          tile.style.left = '';
+          tile.style.top = '';
+
+          const touch = e.changedTouches[0];
+          const dropTarget = document.elementFromPoint(touch.clientX, touch.clientY);
+          if (dropTarget && dropTarget.classList.contains('slot')) {
+            if (dropTarget.children.length === 0) {
+              dropTarget.appendChild(tile);
+            }
+          }
+        };
       });
 
       if (onClick) {
@@ -111,42 +131,13 @@
       return tile;
     }
 
-    // 创建格子 slot
     function createSlot() {
       const slot = document.createElement('div');
       slot.className = 'slot';
       slot.dataset.role = 'empty';
-
-      slot.addEventListener('dragover', (e) => e.preventDefault());
-
-      slot.addEventListener('drop', (e) => {
-        e.preventDefault();
-        if (!currentDrag || currentDrag === slot.firstChild) return;
-
-        const targetTile = slot.firstChild;
-
-        if (!targetTile) {
-          slot.appendChild(currentDrag);
-        } else {
-          const srcLevel = parseFloat(currentDrag.textContent);
-          const tgtLevel = parseFloat(targetTile.textContent);
-
-          if (!isNaN(srcLevel) && srcLevel === tgtLevel) {
-            const newTile = createTile(currentDrag.dataset.role, (srcLevel + 0.1).toFixed(1), null, currentDrag.className.replace('tile ', ''));
-            slot.replaceChild(newTile, targetTile);
-            currentDrag.remove();
-          } else {
-            const currentParent = currentDrag.parentElement;
-            slot.replaceChild(currentDrag, targetTile);
-            currentParent.appendChild(targetTile);
-          }
-        }
-      });
-
       return slot;
     }
 
-    // 寻找距离当前位置最近的空格子
     function getClosestEmptySlot(fromIndex) {
       let radius = 1;
       while (radius < 100) {
@@ -168,7 +159,6 @@
       return null;
     }
 
-    // 把 tile 放到临近的空格子
     function placeNear(fromIndex, tile) {
       const targetSlot = getClosestEmptySlot(fromIndex);
       if (targetSlot) {
@@ -176,13 +166,11 @@
       }
     }
 
-    // 初始化游戏棋盘与初始元素
     function initializeBoard() {
       for (let i = 0; i < 70; i++) {
         board.appendChild(createSlot());
       }
 
-      // 初始点击元素 1
       const tile1 = createTile('1', '1', () => {
         if (energy <= 0) return alert('体力不足');
         const subTile = createTile('1-sub', '1.1', null, 'tile-1-sub');
@@ -192,7 +180,6 @@
         updateEnergyDisplay();
       }, 'tile-1');
 
-      // 初始点击元素 2
       const tile2 = createTile('2', '2', () => {
         if (energy <= 0) return alert('体力不足');
         const subTile = createTile('2-sub', '2.1', null, 'tile-2-sub');
@@ -202,7 +189,6 @@
         updateEnergyDisplay();
       }, 'tile-2');
 
-      // 初始点击元素 3
       const tile3 = createTile('3', '3', () => {
         if (energy <= 0) return alert('体力不足');
         const subTile = createTile('3-sub', '3.1', null, 'tile-3-sub');
@@ -212,7 +198,6 @@
         updateEnergyDisplay();
       }, 'tile-3');
 
-      // 把初始元素放到左上角区域
       board.children[0].appendChild(tile1);
       board.children[1].appendChild(tile2);
       board.children[2].appendChild(tile3);
