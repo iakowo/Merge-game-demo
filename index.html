@@ -101,7 +101,6 @@
       tile.dataset.id = ++idCounter;
       tile.setAttribute('draggable', false);
 
-      // 点击生成子 tile
       if (onClick) tile.addEventListener('click', onClick);
 
       // 触控拖拽支持 + 合成逻辑
@@ -130,22 +129,36 @@
           tile.style.left = '';
           tile.style.top = '';
 
-          const touch = e.changedTouches[0];
-          const dropTarget = document.elementFromPoint(touch.clientX, touch.clientY);
+          // 获取中心点坐标
+          const rect = tile.getBoundingClientRect();
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
+
+          // 用中心点匹配 slot
+          let dropTarget = null;
+          for (const slot of board.children) {
+            const slotRect = slot.getBoundingClientRect();
+            if (
+              centerX >= slotRect.left && centerX <= slotRect.right &&
+              centerY >= slotRect.top && centerY <= slotRect.bottom
+            ) {
+              dropTarget = slot;
+              break;
+            }
+          }
 
           if (dropTarget && dropTarget.classList.contains('slot')) {
             const existing = dropTarget.querySelector('.tile');
             if (!existing) {
               dropTarget.appendChild(tile);
             } else if (existing !== tile && existing.dataset.level === tile.dataset.level) {
-              // 合成逻辑
               const newLevel = nextLevel(tile.dataset.level);
               const newTile = createTile(tile.dataset.role, newLevel, null, tile.classList[1]);
               dropTarget.innerHTML = '';
               dropTarget.appendChild(newTile);
               originalParent.innerHTML = '';
             } else {
-              originalParent.appendChild(tile); // 合成失败，回退
+              originalParent.appendChild(tile);
             }
           } else {
             originalParent.appendChild(tile);
@@ -184,7 +197,6 @@
       return null;
     }
 
-    // 就近放置
     function placeNear(fromIndex, tile) {
       const targetSlot = getClosestEmptySlot(fromIndex);
       if (targetSlot) targetSlot.appendChild(tile);
