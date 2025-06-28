@@ -132,7 +132,10 @@
           let dropTarget = null;
           for (const slot of board.children) {
             const rect = slot.getBoundingClientRect();
-            if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const distance = Math.hypot(centerX - x, centerY - y);
+            if (distance < 24) {
               dropTarget = slot;
               break;
             }
@@ -145,9 +148,10 @@
             } else if (existing !== tile && existing.dataset.level === tile.dataset.level) {
               const newLevel = nextLevel(tile.dataset.level);
               const newTile = createTile(tile.dataset.role, newLevel, null, tile.classList[1]);
-              dropTarget.innerHTML = '';
-              dropTarget.appendChild(newTile);
-              originalParent.innerHTML = '';
+              dropTarget.replaceChildren(newTile);
+              if (originalParent && originalParent.classList.contains('slot')) {
+                originalParent.innerHTML = '';
+              }
             } else {
               originalParent.appendChild(tile);
             }
